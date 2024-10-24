@@ -1,0 +1,117 @@
+---
+
+- name: add cord chart repo
+  kubernetes.core.helm_repository:
+    name: cord
+    repo_url: "https://charts.opencord.org"
+  when: inventory_hostname in groups['master_nodes']
+
+- name: add aether chart repo
+  kubernetes.core.helm_repository:
+    name: aether
+    repo_url: "https://charts.aetherproject.org"
+  when: inventory_hostname in groups['master_nodes']
+
+- name: find {{ core.data_iface }}'s subnet for RAN
+  shell: ip route | grep {{ core.data_iface }} | awk '/kernel/ {print $1}' | head -1
+  register: result
+  when: inventory_hostname in groups['master_nodes']
+  become: true
+
+# TODO: check if interface subnet is valid
+- set_fact:
+    ran_subnet: "{{ result.stdout if (core.ran_subnet == '') else core.ran_subnet }}"
+  when: inventory_hostname in groups['master_nodes']
+
+- debug:
+    var: "ran_subnet"
+  when: inventory_hostname in groups['master_nodes']
+
+- name: remove /tmp/sdcore-5g-values.yaml
+  file:
+    path: "/tmp/sdcore-5g-values.yaml"
+    state: absent
+  when: inventory_hostname in groups['master_nodes']
+
+- name: copy {{ ROOT_DIR }}/{{ core.values_file }} to /tmp/sdcore-5g-values.yaml
+  template:
+    src: "{{ ROOT_DIR }}/{{ core.values_file }}"
+    dest: "/tmp/sdcore-5g-values.yaml"
+  when: inventory_hostname in groups['master_nodes']
+
+- set_fact:
+    chart_ref_sd_core: "{{ core.helm.chart_ref | regex_replace('^(.*)/.*$', '\\1')  }}"
+  when: inventory_hostname in groups['master_nodes'] and core.helm.local_charts
+
+- debug:
+    var: "chart_ref_sd_core"
+  when: inventory_hostname in groups['master_nodes'] and core.helm.local_charts
+
+- name: copy local_charts "{{ chart_ref_sd_core }}" to /tmp/sdcore-helm-charts
+  synchronize:
+    src: "{{ chart_ref_sd_core }}/"
+    dest: /tmp/sdcore-helm-charts
+    recursive: yes
+    rsync_opts:
+      - "--exclude=.git"
+  when: inventory_hostname in groups['master_nodes'] and core.helm.local_charts
+
+- set_fact:
+    chart_ref_sd_core: "/tmp/sdcore-helm-charts/{{ core.helm.chart_ref | regex_replace('^.*/(.*)$', '\\1') }}"
+  when: inventory_hostname in groups['master_nodes'] and core.helm.local_charts
+
+- debug:
+    var: "chart_ref_sd_core"
+  when: inventory_hostname in groups['master_nodes'] and core.helm.local_charts
+
+- name: update aether 5gc-cp helm dependencies
+  shell: |
+    helm dep up /tmp/sdcore-helm-charts/5g-control-plane
+  when: inventory_hostname in groups['master_nodes'] and core.helm.local_charts
+
+- name: update aether 5gc helm dependencies
+  shell: |
+    helm dep up {{chart_ref_sd_core}}
+  when: inventory_hostname in groups['master_nodes'] and core.helm.local_charts
+
+# TODO: add systems check to avoid issues (e.g., mongodb needing avx support)
+- name: deploy aether 5gc
+  block:
+    - name: deploy aether 5gc
+      kubernetes.core.helm:
+        update_repo_cache: true
+        name: sd-core
+        release_namespace: omec
+        create_namespace: true
+        chart_ref: "{{ core.helm.chart_ref if core.helm.local_charts == false else chart_ref_sd_core }}"
+        chart_version: "{{ core.helm.chart_version }}"
+        values_files:
+          - /tmp/sdcore-5g-values.yaml
+        wait: true
+        wait_timeout: "2m30s"
+        force: true
+      when: inventory_hostname in groups['master_nodes']
+
+  rescue:
+    - name: Get Pods Status
+      shell: kubectl get po -n omec
+      register: pod_status
+      changed_when: false
+      when: inventory_hostname in groups['master_nodes']
+
+    - name: restart Pods if not running
+      shell: |
+        while IFS= read -r line; do
+          name=$(echo "$line" | awk '{print $1}')
+          status=$(echo "$line" | awk '{print $3}')
+
+          if [[ "$status" != "Running" ]]; then
+            kubectl delete pod "$name" -n omec
+          fi
+        done <<< "{{ pod_status.stdout }}"
+      args:
+        executable: /bin/bash
+      when: inventory_hostname in groups['master_nodes']
+  always:
+    - pause:
+        seconds: 60
