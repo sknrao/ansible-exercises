@@ -1,0 +1,7 @@
+# Example playbook
+---
+- hosts: all
+  become: true
+  roles:
+    - role: rt-linux
+

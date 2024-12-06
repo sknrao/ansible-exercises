@@ -1,0 +1,16 @@
+---
+- name: Ensure tuned is installed
+  ansible.builtin.package:
+    name: tuned
+    state: present
+
+- name: Ensure tuned service is enabled and started
+  ansible.builtin.systemd:
+    name: tuned
+    enabled: yes
+    state: started
+
+- name: Set tuned to realtime profile
+  ansible.builtin.command:
+    cmd: tuned-adm profile realtime
+  become: true  # Use become if required for privilege escalation

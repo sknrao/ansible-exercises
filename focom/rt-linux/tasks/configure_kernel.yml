@@ -1,0 +1,51 @@
+---
+- name: Install required packages
+  ansible.builtin.apt:
+    name:
+      - build-essential
+      - libncurses-dev
+      - bison
+      - flex
+      - libssl-dev
+      - libelf-dev
+    state: present
+
+- name: Install ncurses and pkg-config
+  ansible.builtin.apt:
+    name:
+      - libncurses-dev
+      - pkg-config
+    state: present
+  become: true  # Use become if you need sudo permissions
+
+- name: Configure kernel with default config
+  ansible.builtin.command:
+    cmd: make defconfig
+    chdir: /tmp/kernel/linux-6.6.63
+
+- name: Compile the kernel
+  ansible.builtin.command:
+    argv:
+      - make
+      - -j{{ ansible_processor_cores }}
+    chdir: /tmp/kernel/linux-6.6.63
+
+- name: Compile kernel modules
+  ansible.builtin.command:
+    cmd: make modules
+    chdir: /tmp/kernel/linux-6.6.63
+
+- name: Install the kernel
+  ansible.builtin.command:
+    cmd: make install
+    chdir: /tmp/kernel/linux-6.6.63
+
+- name: Install kernel modules
+  ansible.builtin.command:
+    cmd: make modules_install
+    chdir: /tmp/kernel/linux-6.6.63
+
+- name: Update GRUB configuration
+  ansible.builtin.command:
+    cmd: update-grub
+

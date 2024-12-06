@@ -1,0 +1,8 @@
+---
+# tasks file for rt-linux
+- import_tasks: download_kernel.yml
+- import_tasks: configure_kernel.yml
+- import_tasks: isolate_cpu.yml
+- import_tasks: install_tuned.yml
+- import_tasks: install_linuxptp.yml
+- import_tasks: ptp_services.yml
