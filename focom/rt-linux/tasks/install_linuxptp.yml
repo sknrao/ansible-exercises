@@ -1,6 +1,0 @@
----
-- name: Ensure linuxptp is installed
-  ansible.builtin.package:
-    name: linuxptp
-    state: present
-

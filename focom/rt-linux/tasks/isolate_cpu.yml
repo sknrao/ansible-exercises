@@ -1,6 +1,0 @@
----
-- name: Isolate CPUs
-  ansible.builtin.shell: |
-    echo "isolcpus=2,3" >> /etc/default/grub
-    update-grub
-  become: true  # This may be necessary to write to /etc/default/grub
