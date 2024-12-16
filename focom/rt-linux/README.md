@@ -14,7 +14,11 @@ ExecStart=/usr/sbin/phc3sys -s eth0 -c CLOCK_REALTIME -w -m  # Replace eth0 with
 
 Information regarding hosts.ini
 ==========
-
+#add the username @ip_address of the system on which u want to deploy the playbook.
 [all]
 username@ip_address
+
+Command in terminal to run the playbook
+==========
+ansible-playbook -i rt-inv.ini rtlin-playbook.yaml
                                                                                                                     
